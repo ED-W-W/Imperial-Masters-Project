@@ -246,6 +246,7 @@ def make_train(config, env):
             sample_sequence_length=1,
             period=1,
         )
+        print("init sample_traj shape:", jax.tree.map(lambda x: x.shape, sample_traj))
         buffer_state = buffer.init(sample_traj_unbatched)
 
         # TRAINING LOOP
@@ -338,6 +339,7 @@ def make_train(config, env):
                 ],  # put the batch dim first and add a dummy sequence dim
                 timesteps,
             )  # (num_envs, 1, time_steps, ...)
+            print("Runtime sample_traj shape:", jax.tree.map(lambda x: x.shape, buffer_traj_batch))
             buffer_state = buffer.add(buffer_state, buffer_traj_batch)
 
             # NETWORKS UPDATE
