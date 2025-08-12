@@ -246,7 +246,7 @@ def make_train(config, env):
             sample_sequence_length=1,
             period=1,
         )
-        print("init sample_traj shape:", jax.tree.map(lambda x: x.shape, sample_traj))
+        #print("init sample_traj shape:", jax.tree.map(lambda x: x.shape, sample_traj))
         buffer_state = buffer.init(sample_traj_unbatched)
 
         # TRAINING LOOP
@@ -264,9 +264,9 @@ def make_train(config, env):
                 _dones = batchify(last_dones)[:, np.newaxis]
 
                 #########################################################################################
-                print("hstate shape:", hs.shape)  
-                print("_obs shape:", _obs.shape)     
-                print("_dones shape:", _dones.shape)  
+                #print("hstate shape:", hs.shape)  
+                #print("_obs shape:", _obs.shape)     
+                #print("_dones shape:", _dones.shape)  
                 #########################################################################################
 
                 new_hs, q_vals = jax.vmap(
@@ -290,7 +290,7 @@ def make_train(config, env):
                     _rngs, q_vals, eps, batchify(avail_actions)
                 )
                 actions = unbatchify(actions)
-                print("actions", actions)
+                #print("actions", actions)
 
 
                 new_obs, new_env_state, rewards, dones, infos = wrapped_env.batch_step(
@@ -308,9 +308,9 @@ def make_train(config, env):
             # step the env (should be a complete rollout)
             rng, _rng = jax.random.split(rng)
             init_obs, env_state = wrapped_env.batch_reset(_rng)
-            print("init_obs is a dict with keys:", init_obs.keys())
-            for k, v in init_obs.items():
-                print(f"init_obs[{k}] shape:", v.shape) 
+            #print("init_obs is a dict with keys:", init_obs.keys())
+            #for k, v in init_obs.items():
+            #    print(f"init_obs[{k}] shape:", v.shape) 
             init_dones = {
                 agent: jnp.zeros((config["NUM_ENVS"]), dtype=bool)
                 for agent in env.agents + ["__all__"]
@@ -339,7 +339,7 @@ def make_train(config, env):
                 ],  # put the batch dim first and add a dummy sequence dim
                 timesteps,
             )  # (num_envs, 1, time_steps, ...)
-            print("Runtime sample_traj shape:", jax.tree.map(lambda x: x.shape, buffer_traj_batch))
+            #print("Runtime sample_traj shape:", jax.tree.map(lambda x: x.shape, buffer_traj_batch))
             buffer_state = buffer.add(buffer_state, buffer_traj_batch)
 
             # NETWORKS UPDATE
@@ -368,6 +368,7 @@ def make_train(config, env):
                 _rewards = batchify(minibatch.rewards)
                 _avail_actions = batchify(minibatch.avail_actions)
                 ###################################################################################################
+                #print("init_hs.shape", init_hs.shape)
                 #print("_obs.shape", _obs.shape)
                 #print("_does.shape", _dones.shape)
                 #print("init_hs.shape", init_hs.shape)
@@ -510,9 +511,9 @@ def make_train(config, env):
             #    jax.debug.callback(callback, metrics, original_seed)
 
             runner_state = (train_state, buffer_state, test_state, rng)
-            print("Completed update step")
+            #print("Completed update step")
 
-            return runner_state, None
+            return runner_state, metrics #None
 
         def get_greedy_metrics(rng, train_state):
             """Help function to test greedy policy during training"""
@@ -814,7 +815,7 @@ def visualize_recurrent_policy(trained_params, env, config):
 
         #print("_obs.shape:", _obs.shape)
         #print("_dones.shape:", _dones.shape)
-        print("hstate.shape:", hstate.shape)
+        #print("hstate.shape:", hstate.shape)
 
         def apply_fn(h, o, d):
             return network.apply(trained_params, h, o, d)
@@ -824,7 +825,7 @@ def visualize_recurrent_policy(trained_params, env, config):
             _obs,
             _dones,
         )
-        print("hstate.shape:", hstate.shape)
+        #print("hstate.shape:", hstate.shape)
 
         #hstate = hstate[:, None, :]  # Already in (num_agents, hidden_dim)
         q_vals = q_vals.squeeze(axis=1)  # (num_agents, num_envs, num_actions) remove the time dim
@@ -875,6 +876,35 @@ def visualize_recurrent_policy(trained_params, env, config):
     viz = SMAXVisualizer(env, state_seq)
     viz.animate(view=False, save_fname="trained_iql_rnn.gif")
 
+
+import matplotlib.pyplot as plt
+import pandas as pd
+
+def plot_smax_metrics(metrics_df, save_path="iql_training_metrics_plot.png"):
+    plt.figure(figsize=(10, 5))
+
+    # Plot win rate (fraction of episodes won)
+    if "test_returned_won_episode" in metrics_df.columns:
+        plt.plot(metrics_df["env_step"], metrics_df["test_returned_won_episode"],
+                 label="Win Rate", color="blue")
+
+    # Plot mean episode return
+    if "test_returned_episode_returns" in metrics_df.columns:
+        plt.plot(metrics_df["env_step"], metrics_df["test_returned_episode_returns"],
+                 label="Mean Return", color="green")
+
+    plt.xlabel("Environment Steps")
+    plt.ylabel("Value")
+    plt.title("SMAX Training Performance")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+
+        # Save and show
+    plt.savefig(save_path, dpi=300)
+    plt.show()
+
+
 # -----------------------------
 # Main execution
 # -----------------------------
@@ -919,7 +949,7 @@ if __name__ == "__main__":
         "HYP_TUNE": False, # perform hyp tune
 
         # evaluate
-        "TEST_DURING_TRAINING": False, #True,
+        "TEST_DURING_TRAINING": True,
         "TEST_INTERVAL": 0.05, # as a fraction of updates, i.e. log every 5% of training process
         "TEST_NUM_STEPS": 128,
         "TEST_NUM_ENVS": 512, # number of episodes to average over, can affect performance
@@ -947,6 +977,18 @@ if __name__ == "__main__":
 
     # Extract trained parameters from output
     trained_params = output["runner_state"][0].params
+
+    print("Finish training")
+
+    # Convert JAX PyTree to NumPy
+    metrics_np = jax.tree_util.tree_map(lambda x: np.array(x), output["metrics"])
+    metrics_df = pd.DataFrame(metrics_np)
+
+    # Save
+    metrics_df.to_csv("iql_training_metrics.csv", index=False)
+
+    # Plot
+    plot_smax_metrics(metrics_df)
 
     # Visualize policy
     visualize_recurrent_policy(trained_params, env, config)

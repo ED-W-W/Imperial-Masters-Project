@@ -571,7 +571,7 @@ def make_train(config, env):
 
             runner_state = (train_state, buffer_state, test_state, rng)
 
-            return runner_state, None
+            return runner_state, metrics #None
 
         def get_greedy_metrics(rng, train_state):
             """Help function to test greedy policy during training"""
@@ -716,7 +716,7 @@ def visualize_recurrent_policy(trained_params, env, config):
 
         #print("_obs.shape:", _obs.shape)
         #print("_dones.shape:", _dones.shape)
-        print("hstate.shape:", hstate.shape)
+        #print("hstate.shape:", hstate.shape)
 
         def apply_fn(h, o, d):
             return network.apply(trained_params, h, o, d)
@@ -726,7 +726,7 @@ def visualize_recurrent_policy(trained_params, env, config):
             _obs,
             _dones,
         )
-        print("hstate.shape:", hstate.shape)
+        #print("hstate.shape:", hstate.shape)
 
         #hstate = hstate[:, None, :]  # Already in (num_agents, hidden_dim)
         q_vals = q_vals.squeeze(axis=1)  # (num_agents, num_envs, num_actions) remove the time dim
@@ -777,6 +777,33 @@ def visualize_recurrent_policy(trained_params, env, config):
     viz = SMAXVisualizer(env, state_seq)
     viz.animate(view=False, save_fname="trained_qmix_rnn.gif")
 
+import matplotlib.pyplot as plt
+import pandas as pd
+
+def plot_smax_metrics(metrics_df, save_path="qmix_training_metrics_plot.png"):
+    plt.figure(figsize=(10, 5))
+
+    # Plot win rate (fraction of episodes won)
+    if "test_returned_won_episode" in metrics_df.columns:
+        plt.plot(metrics_df["env_step"], metrics_df["test_returned_won_episode"],
+                 label="Win Rate", color="blue")
+
+    # Plot mean episode return
+    if "test_returned_episode_returns" in metrics_df.columns:
+        plt.plot(metrics_df["env_step"], metrics_df["test_returned_episode_returns"],
+                 label="Mean Return", color="green")
+
+    plt.xlabel("Environment Steps")
+    plt.ylabel("Value")
+    plt.title("SMAX Training Performance")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+
+        # Save and show
+    plt.savefig(save_path, dpi=300)
+    plt.show()
+
 
 # -----------------------------
 # Main execution
@@ -810,6 +837,7 @@ if __name__ == "__main__":
         "ENV_NAME": "HeuristicEnemySMAX",
         #"MAP_NAME": "3s_vs_5z",
         "MAP_NAME": "2s3z",
+        #"MAP_NAME": "5m_vs_6m",
         "ENV_KWARGS": {
             "see_enemy_actions": True,
             "walls_cause_death": True,
@@ -817,12 +845,12 @@ if __name__ == "__main__":
         },
 
         "NUM_SEEDS": 1, # number of vmapped seeds
-        "SEED": 0,
+        "SEED": 88,
 
         "HYP_TUNE": False, # perform hyp tune
 
         # evaluate
-        "TEST_DURING_TRAINING": False, #True,
+        "TEST_DURING_TRAINING": True,
         "TEST_INTERVAL": 0.05, # as a fraction of updates, i.e. log every 5% of training process
         "TEST_NUM_STEPS": 128,
         "TEST_NUM_ENVS": 512, # number of episodes to average over, can affect performance
@@ -850,6 +878,18 @@ if __name__ == "__main__":
 
     # Extract trained parameters from output
     trained_params = output["runner_state"][0].params['agent']
+
+    print("Finish training")
+
+    # Convert JAX PyTree to NumPy
+    metrics_np = jax.tree_util.tree_map(lambda x: np.array(x), output["metrics"])
+    metrics_df = pd.DataFrame(metrics_np)
+
+    # Save
+    metrics_df.to_csv("qmix_training_metrics.csv", index=False)
+
+    # Plot
+    plot_smax_metrics(metrics_df)
 
     # Visualize policy
     visualize_recurrent_policy(trained_params, env, config)
