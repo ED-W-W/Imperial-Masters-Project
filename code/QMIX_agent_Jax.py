@@ -804,6 +804,69 @@ def plot_smax_metrics(metrics_df, save_path="qmix_training_metrics_plot.png"):
     plt.savefig(save_path, dpi=300)
     plt.show()
 
+def plot_smax_metrics_multi_rnn(results_dict, save_prefix="qmix_training_metrics_rnn_comparison"):
+    """
+    Plots SMAX Win Rate and Mean Return for multiple RNN sizes.
+    
+    results_dict: {hidden_size: metrics_df}
+        Each metrics_df has columns:
+            - "env_step"
+            - "test_returned_won_episode"
+            - "test_returned_episode_returns"
+    """
+
+    os.makedirs("qmix_results", exist_ok=True)
+
+    # --- Win Rate ---
+    plt.figure(figsize=(8, 5))
+    for hidden_size, df in results_dict.items():
+        if "test_returned_won_episode" in df.columns:
+            plt.plot(
+                df["env_step"],
+                df["test_returned_won_episode"],
+                label=f"RNN {hidden_size} Win Rate"
+            )
+
+            # Save CSV
+            df[["env_step", "test_returned_won_episode"]].to_csv(
+                f"qmix_results/{save_prefix}_win_rate_rnn{hidden_size}.csv",
+                index=False
+            )
+
+    plt.xlabel("Environment Steps")
+    plt.ylabel("Win Rate")
+    plt.title("SMAX Win Rate vs Env Steps")
+    plt.ylim(0, 1)
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(f"qmix_results/{save_prefix}_win_rate.png", dpi=300)
+    plt.show()
+
+    # --- Mean Return ---
+    plt.figure(figsize=(8, 5))
+    for hidden_size, df in results_dict.items():
+        if "test_returned_episode_returns" in df.columns:
+            plt.plot(
+                df["env_step"],
+                df["test_returned_episode_returns"],
+                label=f"RNN {hidden_size} Return"
+            )
+
+            # Save CSV
+            df[["env_step", "test_returned_episode_returns"]].to_csv(
+                f"qmix_results/{save_prefix}_return_rnn{hidden_size}.csv",
+                index=False
+            )
+
+    plt.xlabel("Environment Steps")
+    plt.ylabel("Mean Return")
+    plt.title("SMAX Mean Episode Return vs Env Steps")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(f"qmix_results/{save_prefix}_mean_return.png", dpi=300)
+    plt.show()
 
 # -----------------------------
 # Main execution
@@ -851,7 +914,7 @@ if __name__ == "__main__":
 
         # evaluate
         "TEST_DURING_TRAINING": True,
-        "TEST_INTERVAL": 0.05, # as a fraction of updates, i.e. log every 5% of training process
+        "TEST_INTERVAL": 0.01, # as a fraction of updates, i.e. log every 5% of training process
         "TEST_NUM_STEPS": 128,
         "TEST_NUM_ENVS": 512, # number of episodes to average over, can affect performance
     }
@@ -862,9 +925,48 @@ if __name__ == "__main__":
     env = SMAXLogWrapper(env)
 
     # Prepare RNG
-    rng = jax.random.PRNGKey(config["SEED"])
+    seed = jax.random.PRNGKey(config["SEED"])
     #rngs = jax.random.split(rng, config["NUM_SEEDS"])
 
+        # Dictionary to store results for each RNN size
+    results = {}
+
+    # List of RNN hidden sizes you want to try
+    hidden_sizes = [16, 32, 64, 128, 256, 512] 
+
+    # Optional: seeds if you want reproducibility
+    #seed = config["SEED"]  # just one seed since we're not averaging over seeds here
+
+    for h in hidden_sizes:
+        print(f"\n=== Training with HIDDEN_SIZE = {h} ===")
+        config["HIDDEN_SIZE"] = h
+        
+        #for seed in seeds:
+        print(f"  Seed = {seed}")
+        #rng = jax.random.PRNGKey(seed)
+
+        train_fn = make_train(config, env)
+        # JIT compile the train function
+        train_jit = jax.jit(train_fn, device=jax.devices()[0])
+        
+        # Run training
+        output = train_jit(seed)
+
+        # Convert JAX PyTree metrics to NumPy and then DataFrame
+        metrics_np = jax.tree_util.tree_map(lambda x: np.array(x), output["metrics"])
+        metrics_df = pd.DataFrame(metrics_np)
+
+        # Save individual CSV for this RNN size
+        os.makedirs("qmix_results/raw_metrics", exist_ok=True)
+        metrics_df.to_csv(f"qmix_results/raw_metrics/iql_training_metrics_rnn{h}_seed{seed}.csv", index=False)
+
+        # Store the metrics_df for plotting
+        results[h] = metrics_df
+
+    # Plot all RNN sizes together
+    plot_smax_metrics_multi_rnn(results, save_prefix="qmix_training_metrics_rnn_comparison")
+
+    '''
     # Get the training function from make_train
     train_fn = make_train(config, env)
 
@@ -893,3 +995,4 @@ if __name__ == "__main__":
 
     # Visualize policy
     visualize_recurrent_policy(trained_params, env, config)
+    '''
