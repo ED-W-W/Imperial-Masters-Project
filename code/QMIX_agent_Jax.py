@@ -5,6 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 from functools import partial
 from typing import Any
+import itertools
 
 import chex
 import optax
@@ -868,6 +869,123 @@ def plot_smax_metrics_multi_rnn(results_dict, save_prefix="qmix_training_metrics
     plt.savefig(f"qmix_results/{save_prefix}_mean_return.png", dpi=300)
     plt.show()
 
+def plot_qmix_metrics_multi_mixer_dims(results_dict, save_prefix="qmix_training_mixer_metrics"):
+    """
+    results_dict: {(embedding_dim, hypernet_hidden_dim): metrics_df}
+    Plots win rate and mean return for each parameter combination.
+    """
+    os.makedirs("qmix_mixer_results", exist_ok=True)
+
+    # --- Win Rate ---
+    plt.figure(figsize=(10, 5))
+    for (embed_dim, hyper_dim), df in results_dict.items():
+        if "test_returned_won_episode" in df.columns:
+            plt.plot(
+                df["env_step"],
+                df["test_returned_won_episode"],
+                label=f"Embed {embed_dim}, Hyper {hyper_dim}"
+            )
+
+            # Save CSV
+            df[["env_step", "test_returned_won_episode"]].to_csv(
+                f"qmix_mixer_results/{save_prefix}_win_rate_embed{embed_dim}_hyper{hyper_dim}.csv",
+                index=False
+            )
+
+    plt.xlabel("Environment Steps")
+    plt.ylabel("Win Rate")
+    plt.title("QMIX Win Rate vs Env Steps")
+    plt.ylim(0, 1)  # Fixed between 0 and 1
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(f"qmix_mixer_results/{save_prefix}_win_rate.png", dpi=300)
+    plt.show()
+
+    # --- Mean Return ---
+    plt.figure(figsize=(10, 5))
+    for (embed_dim, hyper_dim), df in results_dict.items():
+        if "test_returned_episode_returns" in df.columns:
+            plt.plot(
+                df["env_step"],
+                df["test_returned_episode_returns"],
+                label=f"Embed {embed_dim}, Hyper {hyper_dim}"
+            )
+
+            # Save CSV
+            df[["env_step", "test_returned_episode_returns"]].to_csv(
+                f"qmix_mixer_results/{save_prefix}_return_embed{embed_dim}_hyper{hyper_dim}.csv",
+                index=False
+            )
+
+    plt.xlabel("Environment Steps")
+    plt.ylabel("Mean Return")
+    plt.title("QMIX Mean Episode Return vs Env Steps")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(f"qmix_mixer_results/{save_prefix}_mean_return.png", dpi=300)
+    plt.show()
+
+
+def plot_qmix_metrics_tau_value(results_dict, save_prefix="qmix_training_tau_metrics"):
+    """
+    results_dict: {(tau_val, epoch): metrics_df}
+    Plots win rate and mean return for each parameter combination.
+    """
+    os.makedirs("qmix_tau_results", exist_ok=True)
+
+    # --- Win Rate ---
+    plt.figure(figsize=(10, 5))
+    for (tau_val, epoch), df in results_dict.items():
+        if "test_returned_won_episode" in df.columns:
+            plt.plot(
+                df["env_step"],
+                df["test_returned_won_episode"],
+                label=f"Tau {tau_val}, Epoch {epoch}"
+            )
+
+            # Save CSV
+            df[["env_step", "test_returned_won_episode"]].to_csv(
+                f"qmix_tau_results/{save_prefix}_win_rate_tau{tau_val}_epoch{epoch}.csv",
+                index=False
+            )
+
+    plt.xlabel("Environment Steps")
+    plt.ylabel("Win Rate")
+    plt.title("QMIX Win Rate vs Env Steps")
+    plt.ylim(0, 1)  # Fixed between 0 and 1
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(f"qmix_tau_results/{save_prefix}_win_rate.png", dpi=300)
+    plt.show()
+
+    # --- Mean Return ---
+    plt.figure(figsize=(10, 5))
+    for (tau_val, epoch), df in results_dict.items():
+        if "test_returned_episode_returns" in df.columns:
+            plt.plot(
+                df["env_step"],
+                df["test_returned_episode_returns"],
+                label=f"Tau {tau_val}, Epoch {epoch}"
+            )
+
+            # Save CSV
+            df[["env_step", "test_returned_episode_returns"]].to_csv(
+                f"qmix_tau_results/{save_prefix}_return_tau{tau_val}_epoch{epoch}.csv",
+                index=False
+            )
+
+    plt.xlabel("Environment Steps")
+    plt.ylabel("Mean Return")
+    plt.title("QMIX Mean Episode Return vs Env Steps")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(f"qmix_tau_results/{save_prefix}_mean_return.png", dpi=300)
+    plt.show()
+
 # -----------------------------
 # Main execution
 # -----------------------------
@@ -879,17 +997,17 @@ if __name__ == "__main__":
         "NUM_STEPS": 128,
         "BUFFER_SIZE": 5000,
         "BUFFER_BATCH_SIZE": 32,
-        "HIDDEN_SIZE": 512,
-        "MIXER_EMBEDDING_DIM": 64,
-        "MIXER_HYPERNET_HIDDEN_DIM": 256,
-        "MIXER_INIT_SCALE": 0.001,
+        "HIDDEN_SIZE": 256, #512,
+        "MIXER_EMBEDDING_DIM": 16, #64,
+        "MIXER_HYPERNET_HIDDEN_DIM": 64, #256,
+        "MIXER_INIT_SCALE": 0.1,
         "EPS_START": 1.0,
         "EPS_FINISH": 0.05,
         "EPS_DECAY": 0.1, # percentage of updates
         "MAX_GRAD_NORM": 10,
-        "TARGET_UPDATE_INTERVAL": 10,
-        "TAU": 1.,
-        "NUM_EPOCHS": 8,
+        "TARGET_UPDATE_INTERVAL": 1, #10,
+        "TAU": 0.1, #1.,
+        "NUM_EPOCHS": 10, #8,
         "LR": 0.00005,
         "LEARNING_STARTS": 10000, # timesteps
         "LR_LINEAR_DECAY": False,
@@ -901,6 +1019,7 @@ if __name__ == "__main__":
         #"MAP_NAME": "3s_vs_5z",
         "MAP_NAME": "2s3z",
         #"MAP_NAME": "5m_vs_6m",
+        #"MAP_NAME": "6h_vs_8z",
         "ENV_KWARGS": {
             "see_enemy_actions": True,
             "walls_cause_death": True,
@@ -908,7 +1027,7 @@ if __name__ == "__main__":
         },
 
         "NUM_SEEDS": 1, # number of vmapped seeds
-        "SEED": 88,
+        "SEED": 28, #88,
 
         "HYP_TUNE": False, # perform hyp tune
 
@@ -928,7 +1047,8 @@ if __name__ == "__main__":
     seed = jax.random.PRNGKey(config["SEED"])
     #rngs = jax.random.split(rng, config["NUM_SEEDS"])
 
-        # Dictionary to store results for each RNN size
+    '''
+    # Dictionary to store results for each RNN size
     results = {}
 
     # List of RNN hidden sizes you want to try
@@ -965,8 +1085,98 @@ if __name__ == "__main__":
 
     # Plot all RNN sizes together
     plot_smax_metrics_multi_rnn(results, save_prefix="qmix_training_metrics_rnn_comparison")
+    '''
+    
+    '''
+    embedding_dims = [16, 32, 64]
+    hypernet_hidden_dims = [64, 128, 256]
+
+    results_dict = {}
+
+    for embed_dim, hyper_dim in itertools.product(embedding_dims, hypernet_hidden_dims):
+        print(f"\n=== Training QMIX with Embed {embed_dim}, Hyper {hyper_dim} ===")
+
+        # config for this run
+        config["HIDDEN_SIZE"] = 256 # fixed the rrn hidden size at 128 since it has best trade off for resource usage and performance
+        config["MIXER_EMBEDDING_DIM"] = embed_dim
+        config["MIXER_HYPERNET_HIDDEN_DIM"] = hyper_dim
+
+        train_fn = make_train(config, env)
+        train_jit = jax.jit(train_fn, device=jax.devices()[0])
+        
+        # Run training
+        output = train_jit(seed)  # assumes train_jit accepts config
+        trained_params = output["runner_state"][0].params
+        print("Finished training.")
+
+        # Convert JAX PyTree -> NumPy -> DataFrame
+        metrics_np = jax.tree_util.tree_map(lambda x: np.array(x), output["metrics"])
+        metrics_df = pd.DataFrame(metrics_np)
+
+        # Save raw metrics for this run
+        os.makedirs("qmix_mixer_results/raw_metrics", exist_ok=True)
+        metrics_df.to_csv(
+            f"qmix_mixer_results/raw_metrics/qmix_raw_mixer_metrics_embed{embed_dim}_hyper{hyper_dim}.csv",
+            index=False
+        )
+
+        # Add to results dictionary
+        results_dict[(embed_dim, hyper_dim)] = metrics_df
+
+    # --- After training all configs, plot ---
+    plot_qmix_metrics_multi_mixer_dims(results_dict, save_prefix="qmix_gridsearch_mixer_dims")
+    '''
 
     '''
+    #tau = [0.1, 0.05, 0.02, 0.01]
+    #num_updates = [10, 20, 50, 100]
+    param_pairs = [
+        (0.1, 10),
+        (0.05, 20),
+        (0.02, 50),
+        (0.01, 100),
+    ]
+
+    results_dict = {}
+
+    #for tau_val, epoch in itertools.product(tau, num_updates):
+    for tau_val, epoch in param_pairs:
+        print(f"\n=== Training QMIX with tau value {tau_val}, epoch {epoch} ===")
+
+        # config for this run
+        config["HIDDEN_SIZE"] = 256 
+        config["MIXER_EMBEDDING_DIM"] = 16
+        config["MIXER_HYPERNET_HIDDEN_DIM"] = 64
+        config["TAU"] = tau_val
+        config["NUM_EPOCHS"] = epoch
+
+        train_fn = make_train(config, env)
+        train_jit = jax.jit(train_fn, device=jax.devices()[0])
+        
+        # Run training
+        output = train_jit(seed)  # assumes train_jit accepts config
+        trained_params = output["runner_state"][0].params
+        print("Finished training.")
+
+        # Convert JAX PyTree -> NumPy -> DataFrame
+        metrics_np = jax.tree_util.tree_map(lambda x: np.array(x), output["metrics"])
+        metrics_df = pd.DataFrame(metrics_np)
+
+        # Save raw metrics for this run
+        os.makedirs("qmix_tau_results/raw_metrics", exist_ok=True)
+        metrics_df.to_csv(
+            f"qmix_tau_results/raw_metrics/qmix_raw_tau_metrics_tau{tau_val}_epoch{epoch}.csv",
+            index=False
+        )
+
+        # Add to results dictionary
+        results_dict[(tau_val, epoch)] = metrics_df
+
+    # --- After training all configs, plot ---
+    plot_qmix_metrics_tau_value(results_dict, save_prefix="qmix_gridsearch_tau_val")
+    '''
+
+    
     # Get the training function from make_train
     train_fn = make_train(config, env)
 
@@ -975,24 +1185,109 @@ if __name__ == "__main__":
     #train_vjit = jax.jit(jax.vmap(make_train(config, env)))
     
     # Run training and get output
-    output = train_jit(rng)
+    output = train_jit(seed)
     #outs = jax.block_until_ready(train_vjit(rngs))
 
     # Extract trained parameters from output
     trained_params = output["runner_state"][0].params['agent']
+    trained_mixer_params = output["runner_state"][0].params['mixer']
 
     print("Finish training")
-
+    
+    
     # Convert JAX PyTree to NumPy
-    metrics_np = jax.tree_util.tree_map(lambda x: np.array(x), output["metrics"])
-    metrics_df = pd.DataFrame(metrics_np)
+    #metrics_np = jax.tree_util.tree_map(lambda x: np.array(x), output["metrics"])
+    #metrics_df = pd.DataFrame(metrics_np)
 
     # Save
-    metrics_df.to_csv("qmix_training_metrics.csv", index=False)
+    #metrics_df.to_csv("qmix_training_metrics.csv", index=False)
 
     # Plot
-    plot_smax_metrics(metrics_df)
+    #plot_smax_metrics(metrics_df)
+    
+
+
+    from flax.serialization import to_bytes, from_bytes
+
+    agent_filepath = "model_params/trained_qmix_params_v2.msgpack"
+    mixer_filepath = "model_params/trained_qmix_mixer_params_v2.msgpack"
+
+    with open(agent_filepath, "wb") as f:
+        f.write(to_bytes(trained_params))
+    with open(mixer_filepath, "wb") as f:
+        f.write(to_bytes(trained_mixer_params))
+    print("Saved params")
+
+    policy_net = RNNQNetwork(
+            action_dim=env.action_space(env.agents[0]).n,
+            hidden_dim=config["HIDDEN_SIZE"],
+        )
+    
+    init_x = (
+        jnp.zeros(
+            (1, 1, env.observation_space(env.agents[0]).shape[0])
+        ),  # (time_step, batch_size, obs_size)
+        jnp.zeros((1, 1)),  # (time_step, batch size)
+    )
+    init_hs = ScannedRNN.initialize_carry(
+        config["HIDDEN_SIZE"], 1
+    )  # (batch_size, hidden_dim)
+    dummy_params = policy_net.init(seed, init_hs, *init_x)
+    
+    # Load trained parameters
+    with open(agent_filepath, "rb") as f:
+        loaded_params = from_bytes(dummy_params, f.read())
+    print("Loaded agent params")
+
+    dummy_mixer = MixingNetwork(
+        config["MIXER_EMBEDDING_DIM"],
+        config["MIXER_HYPERNET_HIDDEN_DIM"],
+        config["MIXER_INIT_SCALE"],
+    )
+
+    wrapped_env = CTRolloutManager(env, batch_size=config["NUM_ENVS"])
+    def _env_sample_step(env_state, unused):
+        rng, key_a, key_s = jax.random.split(
+            jax.random.PRNGKey(0), 3
+        )  # use a dummy rng here
+        key_a = jax.random.split(key_a, env.num_agents)
+        actions = {
+            agent: wrapped_env.batch_sample(key_a[i], agent)
+            for i, agent in enumerate(env.agents)
+        }
+        avail_actions = wrapped_env.get_valid_actions(env_state.env_state)
+        obs, env_state, rewards, dones, infos = wrapped_env.batch_step(
+            key_s, env_state, actions
+        )
+        timestep = Timestep(
+            obs=obs,
+            actions=actions,
+            rewards=rewards,
+            dones=dones,
+            avail_actions=avail_actions,
+        )
+        return env_state, timestep
+
+    _, _env_state = wrapped_env.batch_reset(seed)
+    _, sample_traj = jax.lax.scan(
+        _env_sample_step, _env_state, None, config["NUM_STEPS"]
+    )
+
+    rng, _rng = jax.random.split(seed)
+    init_x = jnp.zeros((len(env.agents), 1, 1)) # q vals: agents, time, batch
+    state_size = sample_traj.obs["__all__"].shape[
+        -1
+    ]  # get the state shape from the buffer
+    init_state = jnp.zeros((1, 1, state_size)) # (time_step, batch_size, obs_size)
+    dummy_mixer_params = dummy_mixer.init(_rng, init_x, init_state)
+
+    # Load trained parameters
+    with open(mixer_filepath, "rb") as f:
+        loaded_mixer_params = from_bytes(dummy_mixer_params, f.read())
+    print("Loaded mixer params")
 
     # Visualize policy
-    visualize_recurrent_policy(trained_params, env, config)
-    '''
+    print("Visualising")
+    visualize_recurrent_policy(loaded_params, env, config)
+    
+    
