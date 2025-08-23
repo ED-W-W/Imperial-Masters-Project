@@ -974,8 +974,8 @@ if __name__ == "__main__":
 
         # ENV
         "ENV_NAME": "HeuristicEnemySMAX",
-        #"MAP_NAME": "3s_vs_5z",
-        "MAP_NAME": "2s3z",
+        "MAP_NAME": "3s_vs_5z",
+        #"MAP_NAME": "2s3z",
         "ENV_KWARGS": {
             "see_enemy_actions": True,
             "walls_cause_death": True,
