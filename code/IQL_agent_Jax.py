@@ -11,11 +11,9 @@ import optax
 import flax.linen as nn
 from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
-#import hydra
-#from omegaconf import OmegaConf
-#import gymnax
+
 import flashbax as fbx
-#import wandb
+
 
 from jaxmarl import make
 from jaxmarl.environments.smax import map_name_to_scenario
@@ -498,20 +496,8 @@ def make_train(config, env):
                 )
                 metrics.update({"test_" + k: v for k, v in test_state.items()})
 
-            # report on wandb if required
-            #if config["WANDB_MODE"] != "disabled":
-
-            #    def callback(metrics, original_seed):
-            #        if config.get('WANDB_LOG_ALL_SEEDS', False):
-            #            metrics.update(
-            #                {f"rng{int(original_seed)}/{k}": v for k, v in metrics.items()}
-            #            )
-            #        wandb.log(metrics)
-
-            #    jax.debug.callback(callback, metrics, original_seed)
 
             runner_state = (train_state, buffer_state, test_state, rng)
-            #print("Completed update step")
 
             return runner_state, metrics #None
 
@@ -631,122 +617,6 @@ def env_from_config(config):
     return env, env_name
 
 
-def single_run(config):
-
-    #config = {**config, **config["alg"]}  # merge the alg config with the main config
-    #print("Config:\n", OmegaConf.to_yaml(config))
-
-    alg_name = config.get("ALG_NAME", "iql_rnn")
-    #env, env_name= env_from_config(copy.deepcopy(config))
-    config["ENV_KWARGS"]["scenario"] = map_name_to_scenario(config["MAP_NAME"])
-    env_name = f"{config['ENV_NAME']}_{config['MAP_NAME']}"
-    env = make(config["ENV_NAME"], **config["ENV_KWARGS"])
-    env = SMAXLogWrapper(env)
-
-    #wandb.init(
-    #    entity=config["ENTITY"],
-    #    project=config["PROJECT"],
-    #    tags=[
-    #        alg_name.upper(),
-    #        env_name.upper(),
-    #        f"jax_{jax.__version__}",
-    #    ],
-    #    name=f"{alg_name}_{env_name}",
-    #    config=config,
-    #    mode=config["WANDB_MODE"],
-    #)
-
-    rng = jax.random.PRNGKey(config["SEED"])
-
-    rngs = jax.random.split(rng, config["NUM_SEEDS"])
-    train_vjit = jax.jit(jax.vmap(make_train(config, env)))
-    outs = jax.block_until_ready(train_vjit(rngs))
-
-    print(len(outs))
-
-    # save params
-    #if config.get("SAVE_PATH", None) is not None:
-    #    from jaxmarl.wrappers.baselines import save_params
-
-    #    model_state = outs["runner_state"][0]
-    #    save_dir = os.path.join(config["SAVE_PATH"], env_name)
-    #    os.makedirs(save_dir, exist_ok=True)
-    #    OmegaConf.save(
-    #        config,
-    #        os.path.join(
-    #            save_dir, f'{alg_name}_{env_name}_seed{config["SEED"]}_config.yaml'
-    #        ),
-    #    )
-
-    #    for i, rng in enumerate(rngs):
-    #        params = jax.tree.map(lambda x: x[i], model_state.params)
-    #        save_path = os.path.join(
-    #            save_dir,
-    #            f'{alg_name}_{env_name}_seed{config["SEED"]}_vmap{i}.safetensors',
-    #        )
-    #        save_params(params, save_path)
-
-
-#def tune(default_config):
-#    """Hyperparameter sweep with wandb."""
-
-#    default_config = {**default_config, **default_config["alg"]}  # merge the alg config with the main config
-#    env_name = default_config["ENV_NAME"]
-#    alg_name = default_config.get("ALG_NAME", "iql_rnn") 
-#    env, env_name = env_from_config(default_config)
-
-#    def wrapped_make_train():
-#        wandb.init(project=default_config["PROJECT"])
-
-        # update the default params
-#        config = copy.deepcopy(default_config)
-#        for k, v in dict(wandb.config).items():
-#            config[k] = v
-
-#        print("running experiment with params:", config)
-
-#        rng = jax.random.PRNGKey(config["SEED"])
-#        rngs = jax.random.split(rng, config["NUM_SEEDS"])
-#        train_vjit = jax.jit(jax.vmap(make_train(config, env)))
-#        outs = jax.block_until_ready(train_vjit(rngs))
-
-#    sweep_config = {
-#        "name": f"{alg_name}_{env_name}",
-#        "method": "bayes",
-#        "metric": {
-#            "name": "test_returned_episode_returns",
-#            "goal": "maximize",
-#        },
-#        "parameters": {
-#            "LR": {
-#                "values": [
-#                    0.005,
-#                    0.001,
-#                    0.0005,
-#                    0.0001,
-#                    0.00005,
-#                ]
-#            },
-#            "NUM_ENVS": {"values": [8, 32, 64, 128]},
-#        },
-#    }
-
-#    wandb.login()
-#    sweep_id = wandb.sweep(
-#        sweep_config, entity=default_config["ENTITY"], project=default_config["PROJECT"]
-#    )
-#    wandb.agent(sweep_id, wrapped_make_train, count=300)
-
-
-#@hydra.main(version_base=None, config_path="./config", config_name="config")
-#def main(config):
-#    config = OmegaConf.to_container(config)
-#    print("Config:\n", OmegaConf.to_yaml(config))
-#    if config["HYP_TUNE"]:
-#        tune(config)
-#    else:
-#        single_run(config)
-
 
 # -----------------------------
 # Visualize recurrent IPPO policy
@@ -774,11 +644,6 @@ def visualize_recurrent_policy(trained_params, env, config):
     rng, reset_rng = jax.random.split(rng)
     #wrapped_env = CTRolloutManager(env, batch_size=1)
 
-    # Create policy network
-    #network = RNNQNetwork(
-    #    action_dim=wrapped_env.max_action_space,
-    #    hidden_dim=config["HIDDEN_SIZE"],
-    #)
     network = RNNQNetwork(
         action_dim=env.action_space(env.agents[0]).n,
         hidden_dim=config["HIDDEN_SIZE"],
@@ -787,10 +652,6 @@ def visualize_recurrent_policy(trained_params, env, config):
     # Reset environment
     #obs, env_state = wrapped_env.batch_reset(reset_rng)
     obs, env_state = env.reset(reset_rng)
-    #dones = {
-    #    agent: jnp.zeros((1), dtype=bool)
-    #    for agent in env.agents + ["__all__"]
-    #}
     dones = {agent: jnp.array(False) for agent in env.agents}
     hstate = ScannedRNN.initialize_carry(
         config["HIDDEN_SIZE"], len(env.agents), 1
@@ -856,14 +717,6 @@ def visualize_recurrent_policy(trained_params, env, config):
         state_seq.append((rng_s, env_state.env_state, actions))
 
         # Step environment
-
-        # Batch the actions dict
-        # Original actions: {'ally_0': 4, 'ally_1': 4, 'ally_2': 4}
-        #actions = {k: jnp.array([v]) for k, v in actions.items()}
-
-        #obs, env_state, rewards, dones, infos = wrapped_env.batch_step(
-        #    rng_s, env_state, actions
-        #)
         obs, env_state, rewards, dones, infos = env.step(rng_s, env_state, actions)
         returns = {a: returns[a] + rewards[a] for a in env.agents}
         
@@ -1016,9 +869,6 @@ if __name__ == "__main__":
     # List of RNN hidden sizes you want to try
     hidden_sizes = [16, 32, 64, 128, 256, 512] 
 
-    # Optional: seeds if you want reproducibility
-    #seed = config["SEED"]  # just one seed since we're not averaging over seeds here
-
     for h in hidden_sizes:
         print(f"\n=== Training with HIDDEN_SIZE = {h} ===")
         config["HIDDEN_SIZE"] = h
@@ -1047,29 +897,3 @@ if __name__ == "__main__":
 
     # Plot all RNN sizes together
     plot_smax_metrics_multi_rnn(results, save_prefix="iql_training_metrics_rnn_comparison")
-    
-    '''
-    # Run training and get output
-    output = train_jit(rng)
-    #outs = jax.block_until_ready(train_vjit(rngs))
-
-    # Extract trained parameters from output
-    trained_params = output["runner_state"][0].params
-
-    print("Finish training")
-
-    # Convert JAX PyTree to NumPy
-    metrics_np = jax.tree_util.tree_map(lambda x: np.array(x), output["metrics"])
-    metrics_df = pd.DataFrame(metrics_np)
-
-    # Save
-    metrics_df.to_csv("iql_training_metrics.csv", index=False)
-
-    # Plot
-    plot_smax_metrics(metrics_df)
-
-    # Visualize policy
-    #visualize_recurrent_policy(trained_params, env, config)
-
-    #single_run(config)
-    '''

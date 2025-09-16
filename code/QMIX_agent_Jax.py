@@ -12,11 +12,8 @@ import optax
 import flax.linen as nn
 from flax.linen.initializers import constant, orthogonal
 from flax.training.train_state import TrainState
-#import hydra
-#from omegaconf import OmegaConf
-#import gymnax
+
 import flashbax as fbx
-#import wandb
 
 from jaxmarl import make
 from jaxmarl.environments.smax import map_name_to_scenario
@@ -560,16 +557,6 @@ def make_train(config, env):
                 )
                 metrics.update({"test_" + k: v for k, v in test_state.items()})
 
-            # report on wandb if required
-            #if config["WANDB_MODE"] != "disabled":
-            #    def callback(metrics, original_seed):
-            #        if config.get('WANDB_LOG_ALL_SEEDS', False):
-            #            metrics.update(
-            #                {f"rng{int(original_seed)}/{k}": v for k, v in metrics.items()}
-            #            )
-            #        wandb.log(metrics)
-            #    jax.debug.callback(callback, metrics, original_seed)
-
             runner_state = (train_state, buffer_state, test_state, rng)
 
             return runner_state, metrics #None
@@ -674,13 +661,7 @@ def preprocess_obs_with_id(obs_dict, env):
 def visualize_recurrent_policy(trained_params, env, config):
     rng = jax.random.PRNGKey(config["SEED"])
     rng, reset_rng = jax.random.split(rng)
-    #wrapped_env = CTRolloutManager(env, batch_size=1)
-
-    # Create policy network
-    #network = RNNQNetwork(
-    #    action_dim=wrapped_env.max_action_space,
-    #    hidden_dim=config["HIDDEN_SIZE"],
-    #)
+    
     network = RNNQNetwork(
         action_dim=env.action_space(env.agents[0]).n,
         hidden_dim=config["HIDDEN_SIZE"],
@@ -689,10 +670,6 @@ def visualize_recurrent_policy(trained_params, env, config):
     # Reset environment
     #obs, env_state = wrapped_env.batch_reset(reset_rng)
     obs, env_state = env.reset(reset_rng)
-    #dones = {
-    #    agent: jnp.zeros((1), dtype=bool)
-    #    for agent in env.agents + ["__all__"]
-    #}
     dones = {agent: jnp.array(False) for agent in env.agents}
     hstate = ScannedRNN.initialize_carry(
         config["HIDDEN_SIZE"], len(env.agents), 1
@@ -758,14 +735,6 @@ def visualize_recurrent_policy(trained_params, env, config):
         state_seq.append((rng_s, env_state.env_state, actions))
 
         # Step environment
-
-        # Batch the actions dict
-        # Original actions: {'ally_0': 4, 'ally_1': 4, 'ally_2': 4}
-        #actions = {k: jnp.array([v]) for k, v in actions.items()}
-
-        #obs, env_state, rewards, dones, infos = wrapped_env.batch_step(
-        #    rng_s, env_state, actions
-        #)
         obs, env_state, rewards, dones, infos = env.step(rng_s, env_state, actions)
         returns = {a: returns[a] + rewards[a] for a in env.agents}
         
@@ -1047,90 +1016,11 @@ if __name__ == "__main__":
     seed = jax.random.PRNGKey(config["SEED"])
     #rngs = jax.random.split(rng, config["NUM_SEEDS"])
 
-    '''
-    # Dictionary to store results for each RNN size
-    results = {}
-
-    # List of RNN hidden sizes you want to try
-    hidden_sizes = [16, 32, 64, 128, 256, 512] 
-
-    # Optional: seeds if you want reproducibility
-    #seed = config["SEED"]  # just one seed since we're not averaging over seeds here
-
-    for h in hidden_sizes:
-        print(f"\n=== Training with HIDDEN_SIZE = {h} ===")
-        config["HIDDEN_SIZE"] = h
-        
-        #for seed in seeds:
-        print(f"  Seed = {seed}")
-        #rng = jax.random.PRNGKey(seed)
-
-        train_fn = make_train(config, env)
-        # JIT compile the train function
-        train_jit = jax.jit(train_fn, device=jax.devices()[0])
-        
-        # Run training
-        output = train_jit(seed)
-
-        # Convert JAX PyTree metrics to NumPy and then DataFrame
-        metrics_np = jax.tree_util.tree_map(lambda x: np.array(x), output["metrics"])
-        metrics_df = pd.DataFrame(metrics_np)
-
-        # Save individual CSV for this RNN size
-        os.makedirs("qmix_results/raw_metrics", exist_ok=True)
-        metrics_df.to_csv(f"qmix_results/raw_metrics/iql_training_metrics_rnn{h}_seed{seed}.csv", index=False)
-
-        # Store the metrics_df for plotting
-        results[h] = metrics_df
-
-    # Plot all RNN sizes together
-    plot_smax_metrics_multi_rnn(results, save_prefix="qmix_training_metrics_rnn_comparison")
-    '''
     
-    '''
-    embedding_dims = [16, 32, 64]
-    hypernet_hidden_dims = [64, 128, 256]
-
-    results_dict = {}
-
-    for embed_dim, hyper_dim in itertools.product(embedding_dims, hypernet_hidden_dims):
-        print(f"\n=== Training QMIX with Embed {embed_dim}, Hyper {hyper_dim} ===")
-
-        # config for this run
-        config["HIDDEN_SIZE"] = 256 # fixed the rrn hidden size at 128 since it has best trade off for resource usage and performance
-        config["MIXER_EMBEDDING_DIM"] = embed_dim
-        config["MIXER_HYPERNET_HIDDEN_DIM"] = hyper_dim
-
-        train_fn = make_train(config, env)
-        train_jit = jax.jit(train_fn, device=jax.devices()[0])
-        
-        # Run training
-        output = train_jit(seed)  # assumes train_jit accepts config
-        trained_params = output["runner_state"][0].params
-        print("Finished training.")
-
-        # Convert JAX PyTree -> NumPy -> DataFrame
-        metrics_np = jax.tree_util.tree_map(lambda x: np.array(x), output["metrics"])
-        metrics_df = pd.DataFrame(metrics_np)
-
-        # Save raw metrics for this run
-        os.makedirs("qmix_mixer_results/raw_metrics", exist_ok=True)
-        metrics_df.to_csv(
-            f"qmix_mixer_results/raw_metrics/qmix_raw_mixer_metrics_embed{embed_dim}_hyper{hyper_dim}.csv",
-            index=False
-        )
-
-        # Add to results dictionary
-        results_dict[(embed_dim, hyper_dim)] = metrics_df
-
-    # --- After training all configs, plot ---
-    plot_qmix_metrics_multi_mixer_dims(results_dict, save_prefix="qmix_gridsearch_mixer_dims")
-    '''
-
-    '''
     #tau = [0.1, 0.05, 0.02, 0.01]
     #num_updates = [10, 20, 50, 100]
     param_pairs = [
+        (1.0, 10),
         (0.1, 10),
         (0.05, 20),
         (0.02, 50),
@@ -1174,7 +1064,7 @@ if __name__ == "__main__":
 
     # --- After training all configs, plot ---
     plot_qmix_metrics_tau_value(results_dict, save_prefix="qmix_gridsearch_tau_val")
-    '''
+    
 
     
     # Get the training function from make_train
@@ -1193,17 +1083,6 @@ if __name__ == "__main__":
     trained_mixer_params = output["runner_state"][0].params['mixer']
 
     print("Finish training")
-    
-    
-    # Convert JAX PyTree to NumPy
-    #metrics_np = jax.tree_util.tree_map(lambda x: np.array(x), output["metrics"])
-    #metrics_df = pd.DataFrame(metrics_np)
-
-    # Save
-    #metrics_df.to_csv("qmix_training_metrics.csv", index=False)
-
-    # Plot
-    #plot_smax_metrics(metrics_df)
     
 
 
